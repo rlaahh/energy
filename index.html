@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>氣</title>
+<style>
+@font-face {
+font-family: 'Monoplexkr';
+src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_Monoplex-kr@1.0/MonoplexKR-Regular.woff2') format('woff2');
+font-weight: 400;
+font-display: swap;
+}
+body{margin:0;background:#000000;color:#e6e6e6;font-family:'Monoplexkr', sans-serif}
+
+/* --- [추가됨] 프리 인트로 화면 스타일 --- */
+#pre-intro {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    /* [중요] earth.png가 이 파일과 같은 위치에 있어야 합니다 */
+    background: #000 url(earth.png) no-repeat center center;
+    background-size: cover;
+    z-index: 2000; /* 기존 인트로보다 높게 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.5s ease-out;
+}
+
+#pre-intro-text {
+    font-size: 120px; /* 원하시는 크기로 조절하세요 */
+    color: #e6e6e6;
+    background-color: #000;
+    line-height: 1;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-weight: bold;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+}
+
+
+/* --- [수정됨] 기존 인트로 화면 스타일 --- */
+#intro {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: #e6e6e6;
+    transition: opacity 0.5s ease-out;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+    cursor: pointer;
+
+    /* [수정] 처음에 숨기도록 변경 */
+    display: none; 
+    opacity: 0;
+}
+
+#intro-text {
+margin: 0 auto;
+letter-spacing: .15em;
+line-height: 1.6;
+}
+
+/* --- 앱 주요 요소를 처음에 숨김 --- */
+#ui, #canvas, #hint {
+display: none;
+}
+
+/* --- 기존 스타일 --- */
+#ui{position:fixed;left:50%;transform:translateX(-50%);top:12px;bottom:auto;z-index:10;padding:10px 12px;text-align: center;}
+label{display:block;font-size:24px;margin-bottom:6px;color:#ffffff}
+#note{font-size:1.2rem;color:#e6e6e6;margin-top:6px}
+#canvas{width:100vw;height:100vh;position:fixed;left:0;top:0;z-index:5}
+#video{display:none;}
+#hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);font-size:12px;color:#9aa4b2;background:rgba(0,0,0,.35);padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08)}
+
+/* --- [추가됨] 컬러 인풋 스타일 --- */
+#colorB {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding: 0;
+  border: none;
+  background-color: transparent;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+#colorB:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+#colorB::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border-radius: 50%;
+}
+#colorB::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+#colorB::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+#colorB::-moz-focus-inner {
+    border: 0;
+    padding: 0;
+}
+</style>
+</head>
+<body>
+
+<div id="pre-intro">
+    <span id="pre-intro-text">氣</span>
+</div>
+
+<div id="intro">
+<span id="intro-text"
+data-text="人之生, 氣之聚也.|사람의 삶이란 기가 모인 것이다."
+data-text-2="聚則爲生, 散則爲死.|기가 모이면 탄생이 되고, 기가 흩어지면 죽음이 된다."
+data-text-3="若死生爲徒, 吾又何患!| 삶과 죽음이 같다면 우리에게 무슨 걱정이 있겠는가!">
+</span>
+</div>
+
+<div id="ui">
+<input id="colorB" type="color" value="#0E49FF">
+<div id="note">손을 쥐어 흩어진 기를 모아 보세요.</div>
+</div>
+<canvas id="canvas"></canvas>
+<video id="video" autoplay playsinline muted></video>
+<div id="hint">손을 모으면 기가 모이고, 펼치면 흩어집니다</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script>
+// --- [추가됨] 캔버스 배경 이미지 미리 로드 ---
+const earthImage = new Image();
+let earthImageLoaded = false;
+earthImage.onload = () => {
+    earthImageLoaded = true;
+};
+earthImage.src = 'earth.png'; // CSS와 동일한 경로
+
+// --- 기존 변수 및 함수 선언 ---
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const video=document.getElementById('video');
+const colorBInput=document.getElementById('colorB');
+let colorA="#000000"; 
+let colorB=colorBInput.value;
+function hexToRgb(hex) {
+const r = parseInt(hex.slice(1, 3), 16);
+const g = parseInt(hex.slice(3, 5), 16);
+const b = parseInt(hex.slice(5, 7), 16);
+return { r, g, b };
+}
+let colorA_rgb = hexToRgb(colorA);
+let colorB_rgb = hexToRgb(colorB);
+let devicePixelRatioCached=1;
+function resizeCanvas(){
+const dpr=window.devicePixelRatio||1;devicePixelRatioCached=dpr;const w=window.innerWidth;const h=window.innerHeight;canvas.width=Math.floor(w*dpr);canvas.height=Math.floor(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';}
+resizeCanvas();
+window.addEventListener('resize',resizeCanvas);
+const particles=[];
+let desiredParticleCount=4000; 
+function randomRange(a,b){return a+Math.random()*(b-a)}
+function createParticle(){
+return{ x:randomRange(0,canvas.width), y:randomRange(0,canvas.height), vx:randomRange(-.2,.2), vy:randomRange(-.2,.2), size:randomRange(1,5) };
+}
+function setParticleCount(n){
+if(n>particles.length){ for(let i=particles.length;i<n;i++) particles.push(createParticle()); }
+else if(n<particles.length){ particles.length=n; }
+}
+setParticleCount(desiredParticleCount);
+colorBInput.addEventListener('input',()=>{
+colorB=colorBInput.value;
+colorB_rgb = hexToRgb(colorB);
+});
+let lastTimestamp=0;let accum=0;const stepMs=1000/60;
+let handSpread=0;let handCenter=null;let handPresent=false;let handIsOpen=true;let fingertipPoints=[];let pinchActive=false;let minTipSeparation=1;let repelPulse=0
+let webcamReady = false;
+let pinchStartTime = 0;
+const textDelay = 2000;
+let textFadeIn = 0;
+let videoFadeIn = 0;
+function computeHandSpread(landmarks){
+let cx=0,cy=0;const tipIds=[4,8,12,16,20];let cnt=0;for(const id of tipIds){const lm=landmarks[id];if(!lm)continue;cx+=lm.x;cy+=lm.y;cnt++;}
+if(cnt===0){handCenter=null;return 0}
+cx/=cnt;cy/=cnt;handCenter={x:cx,y:cy};
+let sum=0;let used=0;for(const id of tipIds){const lm=landmarks[id];if(!lm)continue;const dx=lm.x-cx;const dy=lm.y-cy;sum+=Math.hypot(dx,dy);used++;}
+if(used===0)return 0;return sum/used;
+}
+function updatePhysics(dt){
+const currentTime = performance.now();
+if (pinchActive) {
+if (pinchStartTime === 0) {
+pinchStartTime = currentTime;
+}
+if (currentTime - pinchStartTime > textDelay) {
+textFadeIn = Math.min(1.0, textFadeIn + 0.05 * dt);
+}
+videoFadeIn = Math.min(1.0, videoFadeIn + 0.01 * dt);
+} else {
+textFadeIn = Math.max(0, textFadeIn - 0.1 * dt);
+pinchStartTime = 0;
+videoFadeIn = Math.max(0, videoFadeIn - 0.01 * dt);
+}
+const hasHand=handPresent&&handCenter;const cx=(hasHand?handCenter.x:0.5)*canvas.width;const cy=(hasHand?handCenter.y:0.5)*canvas.height;
+const spread=handSpread;
+const closeThreshold=0.45;const openThreshold=0.55;let _at=0;
+if(hasHand){
+const prevOpen=handIsOpen;
+if(handIsOpen){ if(spread<=closeThreshold){ handIsOpen=false; } }
+else{ if(spread>=openThreshold){ handIsOpen=true; } }
+if(!prevOpen&&handIsOpen){ repelPulse=1.0 }
+if(pinchActive){ _at= (0.2 + Math.max(0,closeThreshold-spread))*240 } else { _at=0 }
+}
+const noise=.02;const damping=.995;const bounds=4;
+for(let i=0;i<particles.length;i++){
+const p=particles[i];
+if(hasHand){
+const dx=cx-p.x;const dy=cy-p.y;const dist=Math.hypot(dx,dy)+1e-4;const nx=dx/dist;const ny=dy/dist;const force=(_at)/Math.max(40,dist);
+p.vx+=nx*force*dt;p.vy+=ny*force*dt;
+if(_at===0&&handIsOpen){const dot=p.vx*nx+p.vy*ny;if(dot>0){p.vx-=nx*dot;p.vy-=ny*dot}
+const rPx=Math.max(60,handSpread*280*devicePixelRatioCached);
+if(dist<rPx){p.x=cx-nx*rPx;p.y=cy-ny*rPx;const dot2=p.vx*nx+p.vy*ny;if(dot2>0){p.vx-=nx*dot2;p.vy-=ny*dot2}const tx=-ny,ty=nx;p.vx+=tx*0.3;p.vy+=ty*0.3}}
+}
+if(repelPulse>0){
+const dx=cx-p.x;const dy=cy-p.y;const dist=Math.hypot(dx,dy)+1e-4;const nx=dx/dist;const ny=dy/dist;const rp=(220*Math.min(1,repelPulse))/Math.max(60,dist);
+p.vx-=nx*rp*dt;p.vy-=ny*rp*dt;
+}
+p.vx+=randomRange(-noise,noise);p.vy+=randomRange(-noise,noise);
+p.vx*=damping;p.vy*=damping;
+p.x+=p.vx*dt;p.y+=p.vy*dt;
+if(p.x< -bounds){p.x=canvas.width+bounds}
+if(p.y< -bounds){p.y=canvas.height+bounds}
+if(p.x>canvas.width+bounds){p.x=-bounds}
+if(p.y>canvas.height+bounds){p.y=-bounds}
+}
+if(repelPulse>0){repelPulse=Math.max(0,repelPulse-0.05*dt)}
+}
+
+// --- [수정됨] render 함수 ---
+function render(){
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+
+    // 1. [수정] 캔버스를 검은색 대신 earth.png 이미지로 지웁니다.
+    if (earthImageLoaded) {
+        // 이미지가 캔버스를 꽉 채우도록 그립니다 (background-size: cover 와 동일한 로직)
+        const imgAspect = earthImage.width / earthImage.height;
+        const canvasAspect = canvasWidth / canvasHeight;
+        let sx = 0, sy = 0, sWidth = earthImage.width, sHeight = earthImage.height;
+
+        if (canvasAspect > imgAspect) { // 캔버스가 이미지보다 가로로 넓음
+            sHeight = earthImage.width / canvasAspect;
+            sy = (earthImage.height - sHeight) / 2;
+        } else { // 캔버스가 이미지보다 세로로 넓음 (또는 같음)
+            sWidth = earthImage.height * canvasAspect;
+            sx = (earthImage.width - sWidth) / 2;
+        }
+        ctx.drawImage(earthImage, sx, sy, sWidth, sHeight, 0, 0, canvasWidth, canvasHeight);
+    } else {
+        // 이미지가 아직 로드 안됐으면 검은색으로
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+
+    // --- 2. 웹캠이 준비되었을 때만 비디오와 손을 "먼저" 그립니다. (배경 위에) ---
+    if (webcamReady) {
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const videoScale = 0.7;
+        const destWidth = canvasWidth * videoScale;
+        const destHeight = canvasHeight * videoScale;
+        const destX = (canvasWidth - destWidth) / 2;
+        const destY = (canvasHeight - destHeight) / 2;
+        ctx.save();
+        ctx.translate(canvasWidth / 2, 0);
+        ctx.scale(-1, 1);
+        ctx.translate(-canvasWidth / 2, 0);
+        ctx.globalAlpha = videoFadeIn;
+        if (videoWidth > 0 && videoHeight > 0) {
+            const canvasAspect = canvasWidth / canvasHeight;
+            const videoAspect = videoWidth / videoHeight;
+            let sx, sy, sWidth, sHeight;
+            if (canvasAspect > videoAspect) {
+                sWidth = videoWidth;
+                sHeight = videoWidth / canvasAspect;
+                sx = 0;
+                sy = (videoHeight - sHeight) / 2;
+            } else {
+                sWidth = videoHeight * canvasAspect;
+                sHeight = videoHeight;
+                sx = (videoWidth - sWidth) / 2;
+                sy = 0;
+            }
+            const numSlices = 30;
+            const sliceHeight = destHeight / numSlices;
+            const videoSliceHeight = sHeight / numSlices;
+            const maxOffset = destWidth * 0.25;
+            for (let i = 0; i < numSlices; i++) {
+                const glitchAmount = (1.0 - videoFadeIn);
+                if (Math.random() < glitchAmount * 0.6) {
+                    continue;
+                }
+                const currentOffset = (Math.random() - 0.5) * 2 * maxOffset * glitchAmount;
+                const s_y = sy + i * videoSliceHeight;
+                const d_y = destY + (i * sliceHeight);
+                const s_h = Math.min(videoSliceHeight, videoHeight - s_y);
+                if (s_h <= 0) continue;
+                ctx.drawImage(video,
+                    sx, s_y,
+                    sWidth, s_h,
+                    destX + currentOffset, d_y,
+                    destWidth, sliceHeight
+                );
+            }
+        } else {
+            ctx.drawImage(video, destX, destY, destWidth, destHeight);
+        }
+        ctx.restore();
+
+        // (손가락 끝 원은 여전히 웹캠 위에 그립니다)
+        if(handPresent&&handCenter){
+            ctx.strokeStyle='rgba(0,0,0,0.1)';for(const pt of fingertipPoints){ctx.beginPath();ctx.arc(pt.x*canvas.width,pt.y*canvas.height,10*devicePixelRatioCached,0,Math.PI * 2);ctx.stroke();}
+        }
+    }
+    
+    // --- 3. 파티클 렌더링 (배경과 웹캠 위에) ---
+    ctx.globalCompositeOperation = 'lighter';
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const maxDist = Math.hypot(centerX, centerY);
+    for(let i=0;i<particles.length;i++){
+        const p=particles[i];
+        const dx = p.x - centerX;
+        const dy = p.y - centerY;
+        const dist = Math.hypot(dx, dy);
+        const t = Math.min(1.0, dist / maxDist);
+
+        const r = Math.floor(colorA_rgb.r + (colorB_rgb.r - colorA_rgb.r) * t);
+        const g = Math.floor(colorA_rgb.g + (colorB_rgb.g - colorA_rgb.g) * t);
+        const b = Math.floor(colorA_rgb.b + (colorB_rgb.b - colorA_rgb.b) * t);
+        
+        const particleColor = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillStyle = particleColor;
+        const size = p.size * devicePixelRatioCached;
+        const glowSize = size * 1.5;
+        ctx.globalAlpha = 0.2;
+        ctx.fillRect(p.x - glowSize / 2, p.y - glowSize / 2, glowSize, glowSize);
+        ctx.globalAlpha = 1.0;
+        ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+    }
+    ctx.globalCompositeOperation = 'source-over'; // 파티클 그리기 후 다시 기본 모드로 변경
+    ctx.globalAlpha = 1.0;
+
+    // --- 4. "기가 모였습니다" 텍스트를 가장 마지막에 (모든 것 위로) 그립니다. ---
+    if (webcamReady && textFadeIn > 0 && handCenter) {
+            const text = '당신은 기가 모여 탄생합니다.';
+            const textX = handCenter.x * canvas.width;
+            const textY = handCenter.y * canvas.height - 80;
+            const fontSize = 32;
+            ctx.font = `bold ${fontSize}px Monoplexkr`;
+            const metrics = ctx.measureText(text);
+            const textWidth = metrics.width;
+            const padding = 15;
+            const boxWidth = textWidth + padding * 2;
+            const boxHeight = fontSize + padding * 2;
+            const boxX = textX - boxWidth / 2;
+            const boxY = textY - boxHeight / 2;
+            ctx.fillStyle = `rgba(0, 0, 0)`;
+            ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = `rgba(255, 255, 255, ${textFadeIn})`;
+            ctx.fillText(text, textX, textY);
+    }
+}
+// --- render 함수 끝 ---
+
+function loop(ts){
+if(!lastTimestamp)lastTimestamp=ts;let dtMs=ts-lastTimestamp;lastTimestamp=ts;accum+=dtMs;let steps=0;while(accum>=stepMs&&steps<3){updatePhysics(stepMs/16.6667);accum-=stepMs;steps++;}
+render();
+requestAnimationFrame(loop);
+}
+async function setupCamera(){
+try{
+const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+video.srcObject=stream;await new Promise(r=>video.onloadedmetadata=r);
+}catch(err){
+const introTextElement = document.getElementById('intro-text');
+if (introTextElement) {
+introTextElement.textContent = '웹캠 권한이 필요합니다. 설정을 확인하세요.';
+document.getElementById('intro').style.cursor = 'default';
+}
+const note=document.getElementById('note');note.textContent='웹캠 접근 권한이 필요합니다. 브라우저 설정을 확인하세요.';throw err;
+}
+}
+let handsInstance=null;let cameraInstance=null;
+function onResults(results){
+if(results.multiHandLandmarks&&results.multiHandLandmarks.length>0){
+const lms=results.multiHandLandmarks[0];handSpread=computeHandSpread(lms);fingertipPoints=[];const tipIds=[4,8,12,16,20];for(const id of tipIds){const lm=lms[id];if(lm)fingertipPoints.push({x:lm.x,y:lm.y});}
+handPresent=fingertipPoints.length>0;
+minTipSeparation=1;for(let i=0;i<fingertipPoints.length;i++){for(let j=i+1;j<fingertipPoints.length;j++){const a=fingertipPoints[i],b=fingertipPoints[j];const d=Math.hypot(a.x-b.x,a.y-b.y);if(d<minTipSeparation)minTipSeparation=d;}}
+pinchActive=minTipSeparation<0.04;
+}else{handPresent=false;fingertipPoints=[];pinchActive=false;minTipSeparation=1;}
+}
+async function setupHands(){
+return new Promise((resolve)=>{
+const hands=new Hands({locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.6,selfieMode:true});
+hands.onResults(onResults);
+handsInstance=hands;resolve();
+});
+}
+async function setupCameraPipe(){
+return new Promise((resolve)=>{
+const cam=new Camera(video,{onFrame:async()=>{await handsInstance.send({image:video});},width:640,height:480});
+cameraInstance=cam;cam.start();resolve();
+});
+}
+async function startApp(){
+await setupCamera();
+await setupHands();
+await setupCameraPipe();
+webcamReady = true;
+}
+
+// --- [수정] 4단계 인트로 로직 (오디오 재생 문제 해결) ---
+(function initIntro() {
+let introStage = 1; // 1: 텍스트 1, 2: 텍스트 2, 3: 텍스트 3
+const introScreen = document.getElementById('intro');
+const introText = document.getElementById('intro-text');
+const text1 = introText.getAttribute('data-text');
+const text2 = introText.getAttribute('data-text-2');
+const text3 = introText.getAttribute('data-text-3');
+let typingInterval = null;
+
+// 메인 앱을 실행하는 헬퍼 함수
+function launchMainApp() {
+    introScreen.style.opacity = '0';
+    setTimeout(() => {
+        introScreen.style.display = 'none';
+        document.getElementById('ui').style.display = 'block';
+        canvas.style.display = 'block';
+        document.getElementById('hint').style.display = 'block';
+        requestAnimationFrame(loop);
+        startApp().catch(err => {
+            console.error("앱 시작 중 오류 발생:", err);
+        });
+    }, 500);
+}
+
+// 텍스트를 타이핑하는 헬퍼 함수
+function typeText(text, onCompleteCallback) {
+    if (typingInterval) clearInterval(typingInterval);
+    introText.innerHTML = '';
+    let index = 0;
+    const typingSpeed = 70;
+    introScreen.style.cursor = 'default';
+    typingInterval = setInterval(() => {
+        if (index < text.length) {
+            const char = text.charAt(index);
+            if (char === '|') {
+                introText.innerHTML += '<br>';
+            } else {
+                introText.innerHTML += char;
+            }
+            index++;
+        } else {
+            clearInterval(typingInterval);
+            typingInterval = null;
+            introScreen.style.cursor = 'pointer';
+            if (onCompleteCallback) onCompleteCallback();
+        }
+    }, typingSpeed);
+}
+
+// 인트로 화면의 메인 클릭 핸들러
+function handleIntroClick() {
+    if (introStage === 1) {
+        introStage = 2;
+        typeText(text2, () => {});
+    } else if (introStage === 2) {
+        introStage = 3;
+        typeText(text3, () => {});
+    } else if (introStage === 3) {
+        introStage = 4;
+        introScreen.style.cursor = 'default';
+        introScreen.removeEventListener('click', handleIntroClick);
+        launchMainApp();
+    }
+}
+
+// --- [수정됨] 시퀀스 시작 ---
+// 1. 프리-인트로 화면 요소만 미리 찾아둡니다.
+const preIntroScreen = document.getElementById('pre-intro');
+// [수정] audio 변수 선언을 여기서 제거합니다.
+
+// 2. 프리 인트로 화면(#pre-intro)에 클릭 리스너를 추가합니다.
+preIntroScreen.addEventListener('click', () => {
+    
+    // [수정] 오디오 요소를 *이 시점에* 찾습니다.
+    const audio = document.getElementById('bg-music');
+
+    // 3. (중요) 첫 번째 사용자 상호작용이므로 여기서 오디오 재생을 시도합니다.
+    if (audio) { // 이제 audio 변수가 정상적으로 요소를 찾아옵니다.
+        audio.play().catch(e => console.error("오디오 재생 실패:", e));
+    } else {
+        console.error("오디오 요소를 찾을 수 없습니다. (ID: bg-music)");
+    }
+
+    // 4. 프리 인트로 화면을 부드럽게 숨깁니다.
+    preIntroScreen.style.opacity = '0';
+    setTimeout(() => {
+        preIntroScreen.style.display = 'none';
+    }, 500); // 0.5초 (CSS transition 시간과 일치)
+
+    // 5. 기존 인트로 화면(#intro)을 부드럽게 표시합니다.
+    introScreen.style.display = 'flex'; 
+    setTimeout(() => { 
+        introScreen.style.opacity = '1';
+    }, 20); 
+
+    // 6. *이제서야* 기존 인트로 로직을 시작합니다.
+    introScreen.addEventListener('click', handleIntroClick);
+    typeText(text1, () => {});
+
+}, { once: true }); // [중요] 이 리스너는 한 번만 실행되도록 합니다.
+
+})();
+
+</script>
+
+<audio id="bg-music" src="music.mp3" loop preload="auto"></audio>
+
+</body>
+</html>
